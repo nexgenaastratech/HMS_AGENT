@@ -34,10 +34,8 @@ from app.rag import RAGSystem
 
 rag_system = RAGSystem()
 
-redis_client = redis.Redis(
-    host=settings.REDIS_HOST,
-    port=settings.REDIS_PORT,
-    password=settings.REDIS_PASSWORD,
+redis_client = redis.from_url(
+    settings.REDIS_URL,
     decode_responses=True,
 )
 

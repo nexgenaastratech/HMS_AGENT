@@ -168,6 +168,25 @@ def store_conversation(phone_no: str, conversation: list):
         logging.error(f"Store Memory Error: {e}")
 
 
+def store_message(phone_no: str, role: str, text: str):
+    """
+    Appends a new message to the LLM's conversation history and stores it in the DB.
+    Also logs individual messages to chat_messages.
+    role: 'user' or 'assistant'
+    """
+    try:
+        # Update the LLM conversation context
+        conversation = get_conversation(phone_no)
+        conversation.append({"role": role, "content": text})
+        store_conversation(phone_no, conversation)
+
+        # Log individual message for SQL Server viewing
+        sender = "bot" if role == "assistant" else "guest"
+        add_chat_message(phone_no, sender, text)
+    except Exception as e:
+        logging.error(f"Store Message Error: {e}")
+
+
 # -------------------------------------------------------
 # Pending Follow-ups
 # -------------------------------------------------------
@@ -329,7 +348,7 @@ def can_send_welcome_followup(phone_no: str, reservation_id: str) -> bool:
 # -------------------------------------------------------
 # Guest Reservations
 # -------------------------------------------------------
-def save_reservation_meta(phone_no: str, booking_id: str, booking_code: str = "", meta_data: dict = None) -> bool:
+def save_reservation_meta(phone_no: str, booking_id: str, booking_code: str = "", meta_data: Optional[dict] = None) -> bool:
     try:
         phone_no = clean_wa_id(phone_no)
         json_meta = json.dumps(meta_data) if meta_data else None
@@ -347,7 +366,7 @@ def save_reservation_meta(phone_no: str, booking_id: str, booking_code: str = ""
                 WHEN NOT MATCHED THEN
                     INSERT (phone_no, booking_id, booking_code, meta_data)
                     VALUES (source.phone_no, source.booking_id, source.booking_code, source.meta_data);
-            """, (phone_no, str(booking_id), str(booking_code), json_meta))
+            """, (phone_no, booking_id, booking_code, json_meta))
             conn.commit()
         return True
     except Exception as e:

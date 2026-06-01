@@ -2,7 +2,7 @@ import requests
 import logging
 from app.core.config import settings
 
-def call_azure_openai_api(messages, max_tokens=200, temperature=0.7):
+def call_azure_openai_api(messages, max_tokens=200, temperature=0.7, tools=None, tool_choice=None):
     try:
         if not settings.AZURE_OPENAI_KEY or not settings.AZURE_OPENAI_ENDPOINT:
             logging.error("Azure OpenAI Key or Endpoint is incomplete in settings.")
@@ -19,9 +19,14 @@ def call_azure_openai_api(messages, max_tokens=200, temperature=0.7):
         payload = {
             "messages": messages,
             "max_completion_tokens": max_tokens,
-            "temperature": 1
+            "temperature": temperature
         }
         
+        if tools:
+            payload["tools"] = tools
+        if tool_choice:
+            payload["tool_choice"] = tool_choice
+            
         response = requests.post(url, headers=headers, json=payload, timeout=20)
         
         if response.status_code == 200:

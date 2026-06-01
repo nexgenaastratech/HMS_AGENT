@@ -9,8 +9,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.endpoints import webhook_router, notification_router
 
+from contextlib import asynccontextmanager
 
-app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print(f"\n[INFO] {settings.PROJECT_NAME} {settings.VERSION} Started (Modular) [INFO]\n")
+    try:
+        from app.services.agent import rag_system
+        # Pre-initialize knowledge base to avoid 429 errors on first message
+        rag_system.initialize_knowledge_base()
+    except Exception as e:
+        logging.error(f"Startup RAG Initialization Failed: {e}")
+    yield
+
+app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,15 +52,6 @@ async def validation_exception_handler(request, exc):
     )
  
 
-@app.on_event("startup")
-async def startup_event():
-    print(f"\n[INFO] {settings.PROJECT_NAME} {settings.VERSION} Started (Modular) [INFO]\n")
-    try:
-        from app.services.agent import rag_system
-        # Pre-initialize knowledge base to avoid 429 errors on first message
-        rag_system.initialize_knowledge_base()
-    except Exception as e:
-        logging.error(f"Startup RAG Initialization Failed: {e}")
 
 @app.get("/assets/{file_path:path}")
 async def serve_asset(file_path: str):
