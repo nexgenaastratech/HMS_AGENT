@@ -1,7 +1,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header, Query
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 from app.core.security import verify_api_key
 from app.core.config import settings
 from app.services.whatsapp import send_template, send_text, send_interactive_cta_url, send_image, send_video, send_document, send_interactive_buttons
@@ -51,7 +51,7 @@ class NotificationRequest(BaseModel):
     filename: Optional[str] = None # For document filename
     reservation_id: Optional[str] = "id_not_set"
 
-class sendReservationDataMeta(BaseModel):
+class SendReservationDataMetaRequest(BaseModel):
     guest_phone: str
     booking_id: str
     booking_code: str
@@ -78,7 +78,7 @@ async def test_followup(
     add_pending_followup(request.guest_phone, task_type="test")
     
     # 3. Schedule the celery task in exactly 60 seconds
-    send_test_followup.apply_async(args=[request.guest_phone], countdown=60)
+    send_test_followup.apply_async(args=[request.guest_phone], countdown=60)  # type: ignore
     
     return {"status": "success", "detail": "Test initiated! Countdown started ⏳"}
 
@@ -91,7 +91,7 @@ async def send_notification(
     if api_key != settings.API_KEY:
          raise HTTPException(status_code=401, detail="Invalid API Key")
 
-    logger.info(f"Received notification request: {request.json()}")
+    logger.info(f"Received notification request: {request.model_dump_json()}")
     
     if request.reservation_id == "id_not_set" or not request.reservation_id:
         request.reservation_id = f"auto_{uuid.uuid4().hex[:8]}"
@@ -113,7 +113,7 @@ async def send_notification(
             if request.template_name == "welcome_in_checkin" and request.button_params:
                 button_keys = {}
                 for idx, param in enumerate(request.button_params):
-                    param_str = str(param)
+                    param_str = param
                     if "food" in param_str.lower() or idx == 0:
                         button_keys["food"] = param_str
                     elif "service" in param_str.lower() or idx == 1:
@@ -123,7 +123,7 @@ async def send_notification(
                     store_button_keys(request.guest_phone, button_keys)
                     logger.debug(f"Stored button keys: {button_keys}")
             
-            template_payload = {
+            template_payload: Dict[str, Any] = {
                 "messaging_product": "whatsapp",
                 "to": request.guest_phone,
                 "type": "template",
@@ -133,8 +133,9 @@ async def send_notification(
                 }
             }
             components = []
+            trigger_followup = False
+            wa_id = None
        
-        if request.type == "template":
             if request.template_name =="precheckin_details":
                 logger.info("Stopping: We are not sending the precheckin template.")
                 return {"status": "skipped", "detail": "Precheckin is blocked"}
@@ -147,7 +148,6 @@ async def send_notification(
                 
                 from app.services.memory import can_send_welcome_followup
                 
-                trigger_followup = False
                 if can_send_welcome_followup(wa_id, request.reservation_id):
                     trigger_followup = True
                 else:
@@ -169,7 +169,7 @@ async def send_notification(
 
             # Body Params
             if request.template_params:
-                parameters = [{"type": "text", "text": str(p)} for p in request.template_params]
+                parameters = [{"type": "text", "text": p} for p in request.template_params]
                 components.append({"type": "body", "parameters": parameters})
                 logger.debug(f"Template body parameters: {parameters}")
 
@@ -205,12 +205,12 @@ async def send_notification(
                 logger.info(f"WhatsApp API response: {resp.status_code}, {resp.text}")
                 if resp.status_code == 200:
                     # Trigger the follow-up flow ONLY if the initial message was successful
-                    if 'trigger_followup' in locals() and trigger_followup:
+                    if trigger_followup and wa_id:
                         from app.services.memory import add_pending_followup
                         from app.api.worker import send_welcome_followup
                         
                         add_pending_followup(wa_id, task_type="checkin", reservation_id=request.reservation_id)
-                        send_welcome_followup.apply_async(
+                        send_welcome_followup.apply_async(  # type: ignore
                             args=[wa_id, 0, request.reservation_id],
                             countdown=settings.INITIAL_FOLLOWUP_DELAY_SECONDS
                         )
@@ -361,7 +361,7 @@ async def send_notification(
 
 @router.post("/sendReservationDataMeta")
 async def sendReservationDataMeta(
-    request: sendReservationDataMeta, 
+    request: SendReservationDataMetaRequest, 
     api_key: str = Header(..., alias="api-key")
 ):
     if api_key != settings.API_KEY:
@@ -373,7 +373,7 @@ async def sendReservationDataMeta(
     from app.services.memory import save_reservation_meta
     
     success = save_reservation_meta(
-        guest_phone=request.guest_phone,
+        phone_no=request.guest_phone,
         booking_id=request.booking_id,
         booking_code=request.booking_code
     )
@@ -401,7 +401,7 @@ async def getReservationDataMeta(
 
     from app.services.memory import get_reservation_meta
     
-    reservation_meta = get_reservation_meta(guest_phone=guest_phone)
+    reservation_meta = get_reservation_meta(phone_no=guest_phone)
     
     return {
         "status": "success", 

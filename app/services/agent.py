@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import redis
 
@@ -62,7 +62,7 @@ def handle_greeting(wa_id: str, guest_name: str) -> bool:
 
         if rooms:
             # --- EXISTING GUEST: currently checked in ---
-            utc_now  = datetime.utcnow()
+            utc_now  = datetime.now(timezone.utc)
             ist_now  = utc_now + timedelta(hours=5, minutes=30)
             hour     = ist_now.hour
 
@@ -220,9 +220,9 @@ def handle_yes_no(wa_id: str, user_text: str, msg_type: str, msg_context_id: str
         r_status = _get_request_status(req)
         if r_status in ("completed", "closed"):
             continue
-        r_room = str(req.get("roomNumber", "")).upper()
+        r_room = f"{req.get('roomNumber', '')}".upper()
         r_id   = req.get("queryRequestId") or req.get("requestId")
-        if active_room and r_room == str(active_room).upper():
+        if active_room and r_room == f"{active_room}".upper():
             target_req_id = r_id
             break
         if not target_req_id:
@@ -560,7 +560,7 @@ def _execute_tool(tool_name: str, args: dict, wa_id: str) -> dict:
         for r in rooms:
             num = r.get("roomNumber") or r.get("roomNo") if isinstance(r, dict) else r
             if num:
-                room_numbers.append(str(num).upper())
+                room_numbers.append(f"{num}".upper())
         return {"rooms": room_numbers}
 
     elif tool_name == "send_room_selector":
@@ -667,11 +667,11 @@ def _extract_requests_list(reqs_data) -> list:
 
 
 def _get_request_status(req: dict) -> str:
-    status = str(req.get("queryStatus", "")).lower()
+    status = f"{req.get('queryStatus', '')}".lower()
     if not status or status == "none":
         status_obj = req.get("status", {})
         if isinstance(status_obj, dict):
-            status = str(status_obj.get("state", "")).lower()
+            status = f"{status_obj.get('state', '')}".lower()
     return status
 
 

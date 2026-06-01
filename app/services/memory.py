@@ -204,7 +204,7 @@ def add_pending_followup(phone_no: str, task_type="checkin", reservation_id="def
                 WHEN NOT MATCHED THEN
                     INSERT (phone_no, reservation_id, task_type)
                     VALUES (source.phone_no, source.reservation_id, source.task_type);
-            """, (phone_no, str(reservation_id), task_type))
+            """, (phone_no, reservation_id, task_type))
             conn.commit()
     except Exception as e:
         logging.error(f"Add pending followup error: {e}")
@@ -216,7 +216,7 @@ def is_pending_followup(phone_no: str, reservation_id=None) -> bool:
         with get_conn() as conn:
             cursor = conn.cursor()
             if reservation_id:
-                cursor.execute("SELECT 1 FROM pending_followups WHERE phone_no = ? AND reservation_id = ?", (phone_no, str(reservation_id)))
+                cursor.execute("SELECT 1 FROM pending_followups WHERE phone_no = ? AND reservation_id = ?", (phone_no, reservation_id))
             else:
                 cursor.execute("SELECT 1 FROM pending_followups WHERE phone_no = ?", (phone_no,))
             result = cursor.fetchone()
@@ -233,12 +233,12 @@ def get_pending_task_type(phone_no: str, reservation_id: Optional[str] = None) -
             if reservation_id:
                 cursor.execute(
                     "SELECT task_type FROM pending_followups WHERE phone_no = ? AND reservation_id = ?",
-                    (str(phone_no), str(reservation_id))
+                    (phone_no, reservation_id)
                 )
             else:
                 cursor.execute(
                     "SELECT TOP 1 task_type FROM pending_followups WHERE phone_no = ? ORDER BY created_at DESC",
-                    (str(phone_no),)
+                    (phone_no,)
                 )
             row = cursor.fetchone()
             return row[0] if row else None
@@ -254,12 +254,12 @@ def update_pending_task_type(phone_no: str, new_type: str, reservation_id: Optio
             if reservation_id:
                 cursor.execute(
                     "UPDATE pending_followups SET task_type = ? WHERE phone_no = ? AND reservation_id = ?",
-                    (new_type, str(phone_no), str(reservation_id))
+                    (new_type, phone_no, reservation_id)
                 )
             else:
                 cursor.execute(
                     "UPDATE pending_followups SET task_type = ? WHERE phone_no = ?",
-                    (new_type, str(phone_no))
+                    (new_type, phone_no)
                 )
             conn.commit()
     except Exception as e:
@@ -272,7 +272,7 @@ def remove_pending_followup(phone_no: str, reservation_id=None):
         with get_conn() as conn:
             cursor = conn.cursor()
             if reservation_id:
-                cursor.execute("DELETE FROM pending_followups WHERE phone_no = ? AND reservation_id = ?", (phone_no, str(reservation_id)))
+                cursor.execute("DELETE FROM pending_followups WHERE phone_no = ? AND reservation_id = ?", (phone_no, reservation_id))
             else:
                 cursor.execute("DELETE FROM pending_followups WHERE phone_no = ?", (phone_no,))
             conn.commit()
@@ -290,7 +290,7 @@ def log_notification(phone_no: str, notification_type: str, status: str, respons
             cursor.execute("""
                 INSERT INTO notification_logs (phone_no, notification_type, status, response_detail)
                 VALUES (?, ?, ?, ?)
-            """, (phone_no, notification_type, status, str(response_detail)))
+            """, (phone_no, notification_type, status, response_detail))
             conn.commit()
     except Exception as e:
         logging.error(f"Add notification log error: {e}")
