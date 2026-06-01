@@ -20,9 +20,8 @@ private_key.pem
 public_key.pem
 
 # Vector databases / indices
-faiss_index/
-vector_db/
 TEMP_REPO/
+
 
 # Executables & installers
 *.exe
