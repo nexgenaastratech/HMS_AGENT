@@ -117,7 +117,7 @@ def handle_greeting(wa_id: str, guest_name: str) -> bool:
                 "We look forward to welcoming you! 🙏"
             )
             send_text(wa_id, welcome_msg)
-            send_location(wa_id)
+          
             store_message(wa_id, "assistant", welcome_msg)
 
         return True

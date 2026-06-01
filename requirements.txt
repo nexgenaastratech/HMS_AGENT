@@ -16,4 +16,5 @@ pypdf
 openai
 redis
 celery
+pyodbc
 

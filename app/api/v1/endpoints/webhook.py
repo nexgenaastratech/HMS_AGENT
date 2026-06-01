@@ -3,7 +3,7 @@ from fastapi import APIRouter, Query, Request, HTTPException, BackgroundTasks, D
 from fastapi.responses import PlainTextResponse, JSONResponse
 from app.core.config import settings
 from app.core.security import verify_webhook_signature
-from app.bot import process_message
+from app.services.process_message import process_message
 
 router = APIRouter()
 

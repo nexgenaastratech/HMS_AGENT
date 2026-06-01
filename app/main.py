@@ -44,7 +44,7 @@ async def validation_exception_handler(request, exc):
 async def startup_event():
     print(f"\n[INFO] {settings.PROJECT_NAME} {settings.VERSION} Started (Modular) [INFO]\n")
     try:
-        from app.bot import rag_system
+        from app.services.agent import rag_system
         # Pre-initialize knowledge base to avoid 429 errors on first message
         rag_system.initialize_knowledge_base()
     except Exception as e:
