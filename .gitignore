@@ -1,0 +1,34 @@
+# Environments
+.env
+venv/
+ENV/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Databases & logs
+*.db
+chats_v2.db
+*.log
+notifications.log
+
+# Credentials & Keys
+*.pem
+private_key.pem
+public_key.pem
+
+# Vector databases / indices
+faiss_index/
+vector_db/
+TEMP_REPO/
+
+# Executables & installers
+*.exe
+nssm.exe
+
+# IDE configs
+.idea/
+.vscode/
