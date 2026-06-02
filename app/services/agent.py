@@ -625,10 +625,10 @@ def _execute_tool(tool_name: str, args: dict, wa_id: str, guest_name: str = "") 
         return {"sent": True, "waiting_for": "room_selection", "rooms_shown": rooms}
 
     elif tool_name == "complete_request_with_confirmation":
-        req_type = args["request_type"]
-        message = args["message"]
-        room = args["room_number"]
-        con_text = args["confirmation_text"]
+        req_type = args.get("request_type", "service")
+        message = args.get("message", "Service request")
+        room = args.get("room_number", "Unknown")
+        con_text = args.get("confirmation_message") or args.get("confirmation_text", "Your request has been received. Our team will assist you shortly.")
 
         success = notify_hotel_staff(wa_id, message, req_type, room)
         log_notification(wa_id, req_type, "sent" if success else "failed", message)
