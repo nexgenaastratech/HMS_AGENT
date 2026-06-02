@@ -159,7 +159,7 @@ def get_room_list(phone_number: str):
         if response and response.status_code == 200:
              return response.json()
         else:
-             logging.error(f"Get Room List Failed: {response.status_code if response else 'No Response'}")
+             logging.error(f"Get Room List Failed: {response.status_code if response is not None else 'No Response'}")
              return None
              
     except Exception as e:
