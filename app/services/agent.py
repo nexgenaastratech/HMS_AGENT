@@ -708,7 +708,7 @@ def run_agent(wa_id: str, guest_name: str, user_text: str) -> str | None:
             messages=messages,
             tools=TOOLS,
             tool_choice="auto",
-            max_tokens=50,
+            max_tokens=1024,
         )
 
         if not api_response or "choices" not in api_response:
@@ -750,8 +750,14 @@ def run_agent(wa_id: str, guest_name: str, user_text: str) -> str | None:
             break
 
         else:
-            logging.warning(f"[Agent] Unexpected finish_reason: {finish_reason}")
-            final_response = "Something went wrong. Please try again."
+            partial = assistant_message.get("content", "").strip()
+            if finish_reason == "length" and partial:
+                # Model hit token limit but produced usable text — use it
+                logging.warning(f"[Agent] finish_reason=length for {wa_id}; using partial response.")
+                final_response = partial
+            else:
+                logging.warning(f"[Agent] Unexpected finish_reason: {finish_reason}")
+                final_response = "Something went wrong. Please try again."
             break
 
     if not final_response and not tool_sent_response:
