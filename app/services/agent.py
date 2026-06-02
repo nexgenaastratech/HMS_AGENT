@@ -337,25 +337,7 @@ TOOLS = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "complete_request_with_confirmation",
-            "description": (
-                "Notifies hotel staff AND sends the branded confirmation image+text to the guest. "
-                "Call once you have both the request details AND the confirmed room number."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "request_type": {"type": "string", "enum": ["food", "service", "complaint", "late_checkout"]},
-                    "message":      {"type": "string", "description": "Full description of the request."},
-                    "room_number":  {"type": "string", "description": "Confirmed room number e.g. '101'."},
-                },
-                "required": ["request_type", "message", "room_number"],
-            },
-        },
-    },
+
     {
         "type": "function",
         "function": {
@@ -422,6 +404,20 @@ TOOLS = [
         },
     },
     {
+        "type": "function",
+        "function": {
+            "name": "send_guest_greeting",
+            "description": (
+                "Sends the correct personalised greeting to the guest based on their reservation status. "
+                "Call this whenever the guest sends a greeting (hi, hello, good morning, vanakkam, namaste, etc.) "
+                "or when they first start a conversation. "
+                "This checks if the guest is checked-in, has a future reservation, or is a new visitor, "
+                "and sends the appropriate welcome message automatically."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
     "type": "function",
     "function": {
         "name": "complete_request_with_confirmation",
@@ -480,66 +476,65 @@ TOOLS = [
 
 AGENT_SYSTEM_PROMPT = """
 You are the AI concierge for Hotel Harriet in Rameswaram, India.
-You assist hotel guests via WhatsApp in a warm, concise, and helpful manner.
+You assist hotel guests via WhatsApp in a warm, concise, and professional manner.
 
-## What you can do (use the provided tools):
-- Handle food orders, housekeeping, complaints, and late checkout requests.
-- Answer questions about the hotel and local Rameswaram travel.
-- Log pre-arrival special requests for guests with future bookings.
-- Mark service requests resolved when guests confirm.
+## YOUR TOOLS
+Use these tools — never make up information:
+- send_guest_greeting       → Personalised welcome based on reservation status
+- get_guest_rooms           → Fetch guest's currently booked rooms
+- send_room_selector        → Show interactive room list when guest has multiple rooms
+- complete_request_with_confirmation → Notify staff + confirm to guest
+- get_open_requests         → Get all open service requests for this guest
+- mark_request_done         → Mark a request completed or re-open it
+- add_guest_special_request → Save a pre-arrival special request
+- search_knowledge_base     → Hotel FAQs, amenities, Rameswaram travel info
+- send_service_menu         → Send the interactive services menu
 
-## Rules:
-1. For ANY service request (food, housekeeping, complaint, late checkout):
-   a. Call get_guest_rooms first — UNLESS the guest stated a room number explicitly.
-   b. If 1 room → call complete_request_with_confirmation directly.
-   c. If multiple rooms → call send_room_selector and wait for guest to pick.
-   d. If no rooms → tell the guest no active booking was found and suggest reception.
-2. Never make up hotel information — use search_knowledge_base.
-3. Keep responses short and friendly. No bullet-point overload.
-4. After completing a request, DO NOT send another text — the confirmation image/text is already sent by the tool.
-5. If a guest says 'yes' to a completion prompt, call get_open_requests then mark_request_done.
-6. Do not ask for information you can get via a tool.
+## SCENARIO RULES (handle ALL of these)
 
-## Confirmation Messages:
-When you call complete_request_with_confirmation, always write
-the confirmation_message yourself following this pattern:
+### 1. GREETING (hi, hello, good morning, vanakkam, namaste, hey, etc.)
+→ ALWAYS call send_guest_greeting. Never reply to a greeting directly.
 
-  "[Acknowledgment of what was received] for Room [room].
-   [Which team will handle it] will assist you shortly.
-   If you need anything else, just ask!"
+### 2. SERVICE REQUEST (food, housekeeping, complaint, late checkout, laundry, etc.)
+a. If guest stated room number → call complete_request_with_confirmation directly.
+b. If no room stated → call get_guest_rooms first.
+   - 1 room found  → call complete_request_with_confirmation directly.
+   - Many rooms    → call send_room_selector, wait for guest to pick.
+   - No rooms      → tell guest no active booking, suggest contacting reception.
 
-Be warm, concise, and professional. Always mention the room number.
-Never use generic text like 'your request has been received' alone —
-always specify what the request was.
+### 3. PENDING ROOM SELECTION (context injected above if applicable)
+→ If PENDING ROOM SELECTION context is present, the guest's message IS the room number.
+→ Call complete_request_with_confirmation immediately with that room and the pending request details.
 
-## CRITICAL CLASSIFICATION RULE:
-Before responding, always ask yourself:
+### 4. YES / NO CONFIRMATION (context injected above if applicable)
+→ If ACTIVE REQUEST context is present and guest says YES:
+   Call get_open_requests → then mark_request_done (resolved=true).
+   Reply: "Thank you! Your request is marked as completed. 😊"
+→ If guest says NO:
+   Call get_open_requests → then mark_request_done (resolved=false).
+   Reply: "Sorry to hear that. Our team has been notified and will attend to you shortly."
 
-  Is the guest making a REQUEST that needs staff action?
-    → call complete_request_with_confirmation or send_room_selector
+### 5. INFORMATION / QUESTION
+→ Call search_knowledge_base. Never guess hotel info.
 
-  Is the guest asking a QUESTION that needs information?
-    → call search_knowledge_base
+### 6. PRE-ARRIVAL SPECIAL REQUEST (context injected above if applicable)
+→ If PENDING FOLLOW-UP context is present and message has a specific request
+  (early check-in, airport pickup, extra bed, dietary need, etc.):
+  Call add_guest_special_request.
+→ If message is vague or a greeting — treat normally, no action.
 
-  Is the guest just having a CONVERSATION? (thanks, ok, yes, greeting)
-    → reply directly, no tool needed
+### 7. CONVERSATION (thank you, ok, 😊, etc.)
+→ Reply directly and warmly. No tool needed.
 
-## Examples to guide you:
-  "I need towels"              → ACTION  → complete_request_with_confirmation
-  "do you have towels?"        → QUESTION → search_knowledge_base
-  "AC not working"             → ACTION  → complete_request_with_confirmation
-  "does the room have AC?"     → QUESTION → search_knowledge_base
-  "send me idli"               → ACTION  → complete_request_with_confirmation
-  "what food do you serve?"    → QUESTION → search_knowledge_base
-  "train from Chennai"         → QUESTION → search_knowledge_base
-  "thank you"                  → CONVERSATION → reply directly
+## CONFIRMATION MESSAGE FORMAT
+When calling complete_request_with_confirmation, write confirmation_message as:
+  "[What was received] for Room [room]. [Team] will assist you shortly. If you need anything else, just ask!"
 
-## Other rules:
-1. For ACTION requests: call get_guest_rooms first if room not stated.
-2. Never make up hotel info — always use search_knowledge_base.
-3. After complete_request_with_confirmation — do NOT send extra text.
-   The confirmation image is already sent by the tool.
-4. Keep replies short and friendly.
+## CRITICAL RULES
+- After complete_request_with_confirmation or send_guest_greeting → DO NOT send extra text. The tool already sent the message.
+- Never make up hotel information — always use search_knowledge_base.
+- Keep replies short, warm, and friendly.
+- Do not ask for information you can get via a tool.
 """
 
 ## Guest context will be injected at runtime (name, room status).
@@ -548,7 +543,7 @@ Before responding, always ask yourself:
 # Tool executor
 # ---------------------------------------------------------------------------
 
-def _execute_tool(tool_name: str, args: dict, wa_id: str) -> dict:
+def _execute_tool(tool_name: str, args: dict, wa_id: str, guest_name: str = "") -> dict:
     logging.info(f"[Agent] Tool: '{tool_name}' | Args: {args}")
 
     if tool_name == "get_guest_rooms":
@@ -637,6 +632,10 @@ def _execute_tool(tool_name: str, args: dict, wa_id: str) -> dict:
         success = add_special_request(booking_id, request_text)
         return {"success": bool(success)}
 
+    elif tool_name == "send_guest_greeting":
+        handle_greeting(wa_id, guest_name)
+        return {"sent": True}
+
     elif tool_name == "search_knowledge_base":
         query = args["query"]
         try:
@@ -684,17 +683,71 @@ def _get_request_status(req: dict) -> str:
 # Main agent loop
 # ---------------------------------------------------------------------------
 
-def run_agent(wa_id: str, guest_name: str, user_text: str) -> str | None:
+def run_agent(wa_id: str, guest_name: str, user_text: str, msg_type: str = "text") -> str | None:
     """
-    Core agentic loop. Replaces the full process_message business logic.
+    Core agentic loop — handles ALL scenarios (greetings, requests, YES/NO,
+    room selection, special requests, follow-ups).
     Returns final text response, or None if response was already sent by a tool.
     """
     store_message(wa_id, "user", user_text)
     conversation = get_conversation(wa_id)
 
-    # Inject guest context into system prompt
-    system_prompt = AGENT_SYSTEM_PROMPT + f"\n\n## Current Guest: {guest_name} | Phone: {wa_id}"
+    # -----------------------------------------------------------------------
+    # Build context block: inject all pending state so the agent knows
+    # exactly what situation the guest is in
+    # -----------------------------------------------------------------------
+    context_lines = [f"## Current Guest: {guest_name} | Phone: {wa_id}"]
 
+    # 1. Pending room selection (guest tapped a service, now choosing room)
+    pending_room = None
+    if redis_client:
+        try:
+            raw = redis_client.get(f"pending_request:{wa_id}")
+            if raw:
+                pending_room = json.loads(raw)
+                context_lines.append(
+                    f"\n## PENDING ROOM SELECTION\n"
+                    f"The guest was asked to select a room for a '{pending_room.get('type')}' request "
+                    f"('{pending_room.get('message')}').\n"
+                    f"The guest's current message IS the room number they chose.\n"
+                    f"Call complete_request_with_confirmation with that room number immediately."
+                )
+        except Exception:
+            pass
+
+    # 2. Active request awaiting YES/NO confirmation
+    if redis_client and not pending_room:
+        try:
+            raw = redis_client.get(f"active_request:{wa_id}")
+            if raw:
+                active = json.loads(raw)
+                context_lines.append(
+                    f"\n## ACTIVE REQUEST (awaiting YES/NO)\n"
+                    f"The guest has an open '{active.get('type')}' request for Room {active.get('room')}.\n"
+                    f"If the guest replies YES → call get_open_requests then mark_request_done (resolved=true).\n"
+                    f"If the guest replies NO  → call get_open_requests then mark_request_done (resolved=false)."
+                )
+        except Exception:
+            pass
+
+    # 3. Pending follow-up from DB (e.g. special pre-arrival request prompt)
+    pending_type = get_pending_task_type(wa_id)
+    if pending_type:
+        context_lines.append(
+            f"\n## PENDING FOLLOW-UP: {pending_type}\n"
+            f"The guest was previously asked to provide their special pre-arrival request.\n"
+            f"If their message contains a specific request (early check-in, pickup, dietary, extra bed), "
+            f"call add_guest_special_request. Otherwise treat as a normal message."
+        )
+
+    # 4. Message type context
+    if msg_type == "interactive":
+        context_lines.append(
+            "\n## Message Type: interactive\n"
+            "The guest replied via a WhatsApp button or list tap."
+        )
+
+    system_prompt = AGENT_SYSTEM_PROMPT + "\n\n" + "\n".join(context_lines)
     messages = [{"role": "system", "content": system_prompt}] + conversation
 
     MAX_ITERATIONS = 6
@@ -731,10 +784,10 @@ def run_agent(wa_id: str, guest_name: str, user_text: str) -> str | None:
                 except json.JSONDecodeError:
                     tool_args = {}
 
-                tool_result = _execute_tool(tool_name, tool_args, wa_id)
+                tool_result = _execute_tool(tool_name, tool_args, wa_id, guest_name)
 
                 # These tools send their own WhatsApp messages — agent text not needed
-                if tool_name in ("complete_request_with_confirmation", "send_room_selector", "send_service_menu"):
+                if tool_name in ("complete_request_with_confirmation", "send_room_selector", "send_service_menu", "send_guest_greeting"):
                     tool_sent_response = True
 
                 messages.append({
