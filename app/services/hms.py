@@ -43,7 +43,7 @@ def login_and_get_token() -> Optional[str]:
         logging.error(f"❌ HMS Login Error: {e}")
         return None
 
-def make_authenticated_request(method: str, url: str, json_data: Dict[str, Any] = None, params: Dict[str, Any] = None) -> requests.Response:
+def make_authenticated_request(method: str, url: str, json_data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None) -> requests.Response:
     """
     Wrapper for requests to handle 401 Unauthorized by refreshing token and retrying.
     """
@@ -105,7 +105,7 @@ def log_chat_to_server(phone_number, message_text, sender="Guest"):
     except Exception as e:
         print(f" DB Log Error: {e}")
 
-def notify_hotel_staff(phone_number: str, user_message: str, request_type: str, room_number: str = None):
+def notify_hotel_staff(phone_number: str, user_message: str, request_type: str, room_number: Optional[str] = None):
     try:
         url = settings.NOTIFICATION_URL
         fromGuest = True 

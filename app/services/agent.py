@@ -82,8 +82,8 @@ def handle_greeting(wa_id: str, guest_name: str) -> bool:
             store_message(wa_id, "assistant", greeting_text)
             send_services_request(wa_id)
 
-        elif check_reserved_status(wa_id):
-            # --- PRE-ARRIVAL: confirmed future reservation ---
+        elif len(get_reservation_meta(wa_id)) > 0:
+            # --- PRE-ARRIVAL: confirmed future reservation (checked via local DB) ---
             welcome_msg = (
                 "*Your stay at Hotel Harriet is confirmed!* 🏨\n\n"
                 "We see you have a reservation for your upcoming visit to Rameswaram.\n"
