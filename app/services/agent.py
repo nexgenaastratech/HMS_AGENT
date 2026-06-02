@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import redis
+from typing import Optional
 
 from app.core.config import settings
 from app.services.ai import call_azure_openai_api
@@ -34,9 +35,10 @@ from app.rag import RAGSystem
 
 rag_system = RAGSystem()
 
-redis_client = redis.from_url(
-    settings.REDIS_URL,
-    decode_responses=True,
+redis_client: Optional[redis.Redis] = (
+    redis.from_url(settings.REDIS_URL, decode_responses=True)
+    if settings.REDIS_URL
+    else None
 )
 
 
@@ -206,7 +208,7 @@ def handle_yes_no(wa_id: str, user_text: str, msg_type: str, msg_context_id: str
 
     # Find the matching open request from Redis active_request
     try:
-        active_raw  = redis_client.get(f"active_request:{wa_id}")
+        active_raw  = redis_client.get(f"active_request:{wa_id}") if redis_client else None
         active_req  = json.loads(active_raw) if active_raw else None
         active_room = active_req.get("room") if active_req else None
     except Exception:
@@ -240,7 +242,8 @@ def handle_yes_no(wa_id: str, user_text: str, msg_type: str, msg_context_id: str
             send_text(wa_id, followup_msg)
             store_message(wa_id, "assistant", bot_reply)
             store_message(wa_id, "assistant", followup_msg)
-            redis_client.delete(f"active_request:{wa_id}")
+            if redis_client:
+                redis_client.delete(f"active_request:{wa_id}")
             send_services_request(wa_id)
         else:
             msg = "We tried to update the status but encountered an issue. Please contact reception if needed."
@@ -267,7 +270,7 @@ def handle_pending_room_selection(wa_id: str, user_text: str) -> bool:
     Replaces WAITING_FOR_ROOM stage logic in bot.py.
     """
     try:
-        raw = redis_client.get(f"pending_request:{wa_id}")
+        raw = redis_client.get(f"pending_request:{wa_id}") if redis_client else None
         if not raw:
             return False
 
@@ -578,11 +581,12 @@ def _execute_tool(tool_name: str, args: dict, wa_id: str) -> dict:
             footer_text="Hotel Harriet",
         )
         # Save pending request so next message (room tap) can complete it
-        redis_client.setex(
-            f"pending_request:{wa_id}",
-            60 * 30,
-            json.dumps({"type": request_type, "message": request_message}),
-        )
+        if redis_client:
+            redis_client.setex(
+                f"pending_request:{wa_id}",
+                60 * 30,
+                json.dumps({"type": request_type, "message": request_message}),
+            )
         return {"sent": True, "waiting_for": "room_selection", "rooms_shown": rooms}
 
     elif tool_name == "complete_request_with_confirmation":
@@ -597,12 +601,13 @@ def _execute_tool(tool_name: str, args: dict, wa_id: str) -> dict:
         logging.info(f"[Agent] Confirmation sent for '{req_type}' Room {room}")
 
         # 3. Save active request for YES/NO follow-up
-        redis_client.setex(
-            f"active_request:{wa_id}",
-            60 * 60 * 6,
-            json.dumps({"room": room, "type": req_type}),
-        )
-        redis_client.delete(f"pending_request:{wa_id}")
+        if redis_client:
+            redis_client.setex(
+                f"active_request:{wa_id}",
+                60 * 60 * 6,
+                json.dumps({"room": room, "type": req_type}),
+            )
+            redis_client.delete(f"pending_request:{wa_id}")
 
         return {"success": bool(success), "room": room, "type": req_type}
 
@@ -619,7 +624,7 @@ def _execute_tool(tool_name: str, args: dict, wa_id: str) -> dict:
         request_id = args["request_id"]
         resolved   = args.get("resolved", True)
         success    = mark_request_completed(request_id, status="true" if resolved else "false")
-        if resolved:
+        if resolved and redis_client:
             redis_client.delete(f"active_request:{wa_id}")
         return {"success": bool(success), "request_id": request_id, "resolved": resolved}
 
