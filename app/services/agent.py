@@ -42,10 +42,10 @@ redis_client: Optional[redis.Redis] = (
 )
 
 
-
 # ---------------------------------------------------------------------------
 # Greeting logic (replaces greeting block in bot.py process_message)
 # ---------------------------------------------------------------------------
+
 
 def handle_greeting(wa_id: str, guest_name: str) -> bool:
     """
@@ -64,9 +64,9 @@ def handle_greeting(wa_id: str, guest_name: str) -> bool:
 
         if rooms:
             # --- EXISTING GUEST: currently checked in ---
-            utc_now  = datetime.now(timezone.utc)
-            ist_now  = utc_now + timedelta(hours=5, minutes=30)
-            hour     = ist_now.hour
+            utc_now = datetime.now(timezone.utc)
+            ist_now = utc_now + timedelta(hours=5, minutes=30)
+            hour = ist_now.hour
 
             if 5 <= hour < 12:
                 time_greeting = "Good Morning"
@@ -77,7 +77,9 @@ def handle_greeting(wa_id: str, guest_name: str) -> bool:
             else:
                 time_greeting = "Hello"
 
-            greeting_text = f"{time_greeting} {guest_name}!\nHow can I assist you today?"
+            greeting_text = (
+                f"{time_greeting} {guest_name}!\nHow can I assist you today?"
+            )
             send_text(wa_id, greeting_text)
             store_message(wa_id, "assistant", greeting_text)
             send_services_request(wa_id)
@@ -117,7 +119,7 @@ def handle_greeting(wa_id: str, guest_name: str) -> bool:
                 "We look forward to welcoming you! 🙏"
             )
             send_text(wa_id, welcome_msg)
-          
+
             store_message(wa_id, "assistant", welcome_msg)
 
         return True
@@ -130,6 +132,7 @@ def handle_greeting(wa_id: str, guest_name: str) -> bool:
 # ---------------------------------------------------------------------------
 # Special request follow-up (replaces pending_type logic in bot.py)
 # ---------------------------------------------------------------------------
+
 
 def handle_pending_followup(wa_id: str, user_text: str) -> bool:
     """
@@ -145,31 +148,36 @@ def handle_pending_followup(wa_id: str, user_text: str) -> bool:
     logging.info(f"[Agent] Handling pending follow-up '{pending_type}' for {wa_id}")
 
     if pending_type in ("get_special_request", "reminder_special_request"):
-        res_data   = get_reservation_meta(wa_id)
+        res_data = get_reservation_meta(wa_id)
         booking_id = res_data[0].get("booking_id") if res_data else None
 
         if not booking_id:
-            logging.warning(f"[Agent] No booking found for {wa_id} — cannot save special request.")
+            logging.warning(
+                f"[Agent] No booking found for {wa_id} — cannot save special request."
+            )
             return False
 
         # Ask AI if this message is a real specific request
         analysis_resp = call_azure_openai_api(
             messages=[
                 {"role": "system", "content": "You are a hotel request analyzer."},
-                {"role": "user", "content": (
-                    f"Classify the guest message as 'get_special_request' if it contains a specific "
-                    f"pre-arrival need (early check-in, pickup, extra bed, dietary, etc.), "
-                    f"or 'other' if it is a greeting or generic acknowledgment.\n\n"
-                    f"Message: \"{user_text}\"\n\nReply ONLY with 'get_special_request' or 'other'."
-                )}
+                {
+                    "role": "user",
+                    "content": (
+                        f"Classify the guest message as 'get_special_request' if it contains a specific "
+                        f"pre-arrival need (early check-in, pickup, extra bed, dietary, etc.), "
+                        f"or 'other' if it is a greeting or generic acknowledgment.\n\n"
+                        f"Message: \"{user_text}\"\n\nReply ONLY with 'get_special_request' or 'other'."
+                    ),
+                },
             ],
             max_tokens=10,
         )
 
         is_real = False
         if analysis_resp and "choices" in analysis_resp:
-            result   = analysis_resp["choices"][0]["message"]["content"].strip().lower()
-            is_real  = "get_special_request" in result
+            result = analysis_resp["choices"][0]["message"]["content"].strip().lower()
+            is_real = "get_special_request" in result
 
         if is_real:
             add_special_request(booking_id, user_text)
@@ -180,7 +188,9 @@ def handle_pending_followup(wa_id: str, user_text: str) -> bool:
             return True
         else:
             # Not a specific request — fall through to normal agent
-            logging.info(f"[Agent] Message not a special request — continuing to agent.")
+            logging.info(
+                f"[Agent] Message not a special request — continuing to agent."
+            )
             return False
 
     # checkin or other pending types — cancel and continue normally
@@ -191,7 +201,10 @@ def handle_pending_followup(wa_id: str, user_text: str) -> bool:
 # YES / NO button handler (replaces YES/NO block in bot.py)
 # ---------------------------------------------------------------------------
 
-def handle_yes_no(wa_id: str, user_text: str, msg_type: str, msg_context_id: str) -> bool:
+
+def handle_yes_no(
+    wa_id: str, user_text: str, msg_type: str, msg_context_id: str
+) -> bool:
     """
     Handles YES/NO interactive button replies for request completion.
     Returns True if fully handled, False to continue to agent.
@@ -203,16 +216,18 @@ def handle_yes_no(wa_id: str, user_text: str, msg_type: str, msg_context_id: str
         return False
 
     # Fetch open requests
-    reqs_data     = get_all_query_request(wa_id)
+    reqs_data = get_all_query_request(wa_id)
     requests_list = _extract_requests_list(reqs_data)
 
     # Find the matching open request from Redis active_request
     try:
-        active_raw  = redis_client.get(f"active_request:{wa_id}") if redis_client else None
-        active_req  = json.loads(active_raw) if active_raw else None
+        active_raw = (
+            redis_client.get(f"active_request:{wa_id}") if redis_client else None
+        )
+        active_req = json.loads(active_raw) if active_raw else None
         active_room = active_req.get("room") if active_req else None
     except Exception:
-        active_req  = None
+        active_req = None
         active_room = None
 
     target_req_id = None
@@ -223,7 +238,7 @@ def handle_yes_no(wa_id: str, user_text: str, msg_type: str, msg_context_id: str
         if r_status in ("completed", "closed"):
             continue
         r_room = f"{req.get('roomNumber', '')}".upper()
-        r_id   = req.get("queryRequestId") or req.get("requestId")
+        r_id = req.get("queryRequestId") or req.get("requestId")
         if active_room and r_room == f"{active_room}".upper():
             target_req_id = r_id
             break
@@ -236,7 +251,7 @@ def handle_yes_no(wa_id: str, user_text: str, msg_type: str, msg_context_id: str
     if answer == "YES":
         success = mark_request_completed(target_req_id)
         if success:
-            bot_reply    = "Thank you! Your request has been marked as completed. We are glad we could help."
+            bot_reply = "Thank you! Your request has been marked as completed. We are glad we could help."
             followup_msg = "If you need anything else—food, services, or assistance—just send us a message. We're always happy to help. 😊"
             send_text(wa_id, bot_reply)
             send_text(wa_id, followup_msg)
@@ -261,7 +276,6 @@ def handle_yes_no(wa_id: str, user_text: str, msg_type: str, msg_context_id: str
     return False
 
 
-
 def handle_pending_room_selection(wa_id: str, user_text: str) -> bool:
     """
     If a room selector was sent and the guest replied with a room number,
@@ -274,8 +288,8 @@ def handle_pending_room_selection(wa_id: str, user_text: str) -> bool:
         if not raw:
             return False
 
-        pending     = json.loads(raw)
-        req_type    = pending.get("type")
+        pending = json.loads(raw)
+        req_type = pending.get("type")
         req_message = pending.get("message")
 
         if not req_type or not req_message:
@@ -286,11 +300,15 @@ def handle_pending_room_selection(wa_id: str, user_text: str) -> bool:
         # Complete the request
         result = _execute_tool(
             "complete_request_with_confirmation",
-            {"request_type": req_type, "message": req_message, "room_number": room_number},
+            {
+                "request_type": req_type,
+                "message": req_message,
+                "room_number": room_number,
+            },
             wa_id,
         )
 
-        store_message(wa_id, "user",      f"Room {room_number}")
+        store_message(wa_id, "user", f"Room {room_number}")
         store_message(wa_id, "assistant", f"Request completed for Room {room_number}")
 
         logging.info(f"[Agent] Pending room selection completed: {result}")
@@ -329,15 +347,24 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "rooms":           {"type": "array", "items": {"type": "string"}, "description": "Room numbers to show."},
-                    "request_type":    {"type": "string", "enum": ["food", "service", "complaint", "late_checkout"]},
-                    "request_message": {"type": "string", "description": "What the guest originally asked for."},
+                    "rooms": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Room numbers to show.",
+                    },
+                    "request_type": {
+                        "type": "string",
+                        "enum": ["food", "service", "complaint", "late_checkout"],
+                    },
+                    "request_message": {
+                        "type": "string",
+                        "description": "What the guest originally asked for.",
+                    },
                 },
                 "required": ["rooms", "request_type", "request_message"],
             },
         },
     },
-
     {
         "type": "function",
         "function": {
@@ -355,7 +382,10 @@ TOOLS = [
                 "type": "object",
                 "properties": {
                     "request_id": {"type": "string"},
-                    "resolved":   {"type": "boolean", "description": "True = completed, False = re-open."},
+                    "resolved": {
+                        "type": "boolean",
+                        "description": "True = completed, False = re-open.",
+                    },
                 },
                 "required": ["request_id", "resolved"],
             },
@@ -418,56 +448,61 @@ TOOLS = [
         },
     },
     {
-    "type": "function",
-    "function": {
-        "name": "complete_request_with_confirmation",
-        "description": (
-            "Notifies hotel staff AND sends a confirmation message to the guest. "
-            "Call once you have the request details and confirmed room number. "
-            "You will write the confirmation_message yourself based on the request type."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "request_type": {
-                    "type": "string",
-                    "description": (
-                        "Category of the request — decide based on what the guest needs. "
-                        "Common values: 'food', 'service', 'complaint', 'late_checkout', 'laundry'. "
-                        "You can use any value that best describes the request."
-                    ),
+        "type": "function",
+        "function": {
+            "name": "complete_request_with_confirmation",
+            "description": (
+                "Notifies hotel staff AND sends a confirmation message to the guest. "
+                "Call once you have the request details and confirmed room number. "
+                "You will write the confirmation_message yourself based on the request type."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "request_type": {
+                        "type": "string",
+                        "description": (
+                            "Category of the request — decide based on what the guest needs. "
+                            "Common values: 'food', 'service', 'complaint', 'late_checkout', 'laundry'. "
+                            "You can use any value that best describes the request."
+                        ),
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Full description of the guest's request, in their words.",
+                    },
+                    "room_number": {
+                        "type": "string",
+                        "description": "Confirmed room number e.g. '101' or 'G06'.",
+                    },
+                    "confirmation_message": {
+                        "type": "string",
+                        "description": (
+                            "The confirmation message to send to the guest. "
+                            "Write it yourself — warm, concise, branded as Hotel Harriet. "
+                            "Always end with: 'If you need anything else, just ask!'\n\n"
+                            "Examples:\n"
+                            "food → 'We have received your order: [msg] for Room [room]. "
+                            "Our Restaurant Team will assist you shortly.'\n"
+                            "service → 'Request for [msg] in Room [room] confirmed. "
+                            "Housekeeping will arrive shortly.'\n"
+                            "complaint → 'Your complaint: [msg] for Room [room] received. "
+                            "The Front Desk team will assist you shortly.'\n"
+                            "laundry → 'Laundry pickup request for Room [room] received. "
+                            "Our team will collect shortly.'\n"
+                            "Follow the same pattern for any new request type."
+                        ),
+                    },
                 },
-                "message": {
-                    "type": "string",
-                    "description": "Full description of the guest's request, in their words.",
-                },
-                "room_number": {
-                    "type": "string",
-                    "description": "Confirmed room number e.g. '101' or 'G06'.",
-                },
-                "confirmation_message": {
-                    "type": "string",
-                    "description": (
-                        "The confirmation message to send to the guest. "
-                        "Write it yourself — warm, concise, branded as Hotel Harriet. "
-                        "Always end with: 'If you need anything else, just ask!'\n\n"
-                        "Examples:\n"
-                        "food → 'We have received your order: [msg] for Room [room]. "
-                        "Our Restaurant Team will assist you shortly.'\n"
-                        "service → 'Request for [msg] in Room [room] confirmed. "
-                        "Housekeeping will arrive shortly.'\n"
-                        "complaint → 'Your complaint: [msg] for Room [room] received. "
-                        "The Front Desk team will assist you shortly.'\n"
-                        "laundry → 'Laundry pickup request for Room [room] received. "
-                        "Our team will collect shortly.'\n"
-                        "Follow the same pattern for any new request type."
-                    ),
-                },
+                "required": [
+                    "request_type",
+                    "message",
+                    "room_number",
+                    "confirmation_message",
+                ],
             },
-            "required": ["request_type", "message", "room_number", "confirmation_message"],
         },
     },
-},
 ]
 
 # ---------------------------------------------------------------------------
@@ -543,6 +578,7 @@ When calling complete_request_with_confirmation, write confirmation_message as:
 # Tool executor
 # ---------------------------------------------------------------------------
 
+
 def _execute_tool(tool_name: str, args: dict, wa_id: str, guest_name: str = "") -> dict:
     logging.info(f"[Agent] Tool: '{tool_name}' | Args: {args}")
 
@@ -562,8 +598,8 @@ def _execute_tool(tool_name: str, args: dict, wa_id: str, guest_name: str = "") 
         return {"rooms": room_numbers}
 
     elif tool_name == "send_room_selector":
-        rooms           = args["rooms"]
-        request_type    = args["request_type"]
+        rooms = args["rooms"]
+        request_type = args["request_type"]
         request_message = args["request_message"]
 
         rows = [{"id": r, "title": r} for r in rooms]
@@ -586,8 +622,8 @@ def _execute_tool(tool_name: str, args: dict, wa_id: str, guest_name: str = "") 
 
     elif tool_name == "complete_request_with_confirmation":
         req_type = args["request_type"]
-        message  = args["message"]
-        room     = args["room_number"]
+        message = args["message"]
+        room = args["room_number"]
         con_text = args["confirmation_text"]
 
         success = notify_hotel_staff(wa_id, message, req_type, room)
@@ -607,26 +643,34 @@ def _execute_tool(tool_name: str, args: dict, wa_id: str, guest_name: str = "") 
         return {"success": bool(success), "room": room, "type": req_type}
 
     elif tool_name == "get_open_requests":
-        reqs_data     = get_all_query_request(wa_id)
+        reqs_data = get_all_query_request(wa_id)
         requests_list = _extract_requests_list(reqs_data)
-        open_reqs     = [
-            r for r in requests_list
-            if isinstance(r, dict) and _get_request_status(r) not in ("completed", "closed")
+        open_reqs = [
+            r
+            for r in requests_list
+            if isinstance(r, dict)
+            and _get_request_status(r) not in ("completed", "closed")
         ]
         return {"open_requests": open_reqs}
 
     elif tool_name == "mark_request_done":
         request_id = args["request_id"]
-        resolved   = args.get("resolved", True)
-        success    = mark_request_completed(request_id, status="true" if resolved else "false")
+        resolved = args.get("resolved", True)
+        success = mark_request_completed(
+            request_id, status="true" if resolved else "false"
+        )
         if resolved and redis_client:
             redis_client.delete(f"active_request:{wa_id}")
-        return {"success": bool(success), "request_id": request_id, "resolved": resolved}
+        return {
+            "success": bool(success),
+            "request_id": request_id,
+            "resolved": resolved,
+        }
 
     elif tool_name == "add_guest_special_request":
         request_text = args["request_text"]
-        res_data     = get_reservation_meta(wa_id)
-        booking_id   = res_data[0].get("booking_id") if res_data else None
+        res_data = get_reservation_meta(wa_id)
+        booking_id = res_data[0].get("booking_id") if res_data else None
         if not booking_id:
             return {"success": False, "error": "No upcoming booking found."}
         success = add_special_request(booking_id, request_text)
@@ -643,7 +687,9 @@ def _execute_tool(tool_name: str, args: dict, wa_id: str, guest_name: str = "") 
             return {"answer": result}
         except Exception as e:
             logging.error(f"[Agent] RAG error: {e}")
-            return {"answer": "Unable to retrieve that information. Please contact reception."}
+            return {
+                "answer": "Unable to retrieve that information. Please contact reception."
+            }
 
     elif tool_name == "send_service_menu":
         send_services_request(wa_id)
@@ -657,6 +703,7 @@ def _execute_tool(tool_name: str, args: dict, wa_id: str, guest_name: str = "") 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_requests_list(reqs_data) -> list:
     if isinstance(reqs_data, list):
@@ -683,7 +730,10 @@ def _get_request_status(req: dict) -> str:
 # Main agent loop
 # ---------------------------------------------------------------------------
 
-def run_agent(wa_id: str, guest_name: str, user_text: str, msg_type: str = "text") -> str | None:
+
+def run_agent(
+    wa_id: str, guest_name: str, user_text: str, msg_type: str = "text"
+) -> str | None:
     """
     Core agentic loop — handles ALL scenarios (greetings, requests, YES/NO,
     room selection, special requests, follow-ups).
@@ -769,8 +819,8 @@ def run_agent(wa_id: str, guest_name: str, user_text: str, msg_type: str = "text
             final_response = "I'm having trouble right now. Please contact reception."
             break
 
-        choice           = api_response["choices"][0]
-        finish_reason    = choice.get("finish_reason")
+        choice = api_response["choices"][0]
+        finish_reason = choice.get("finish_reason")
         assistant_message = choice["message"]
         messages.append(assistant_message)
 
@@ -787,14 +837,21 @@ def run_agent(wa_id: str, guest_name: str, user_text: str, msg_type: str = "text
                 tool_result = _execute_tool(tool_name, tool_args, wa_id, guest_name)
 
                 # These tools send their own WhatsApp messages — agent text not needed
-                if tool_name in ("complete_request_with_confirmation", "send_room_selector", "send_service_menu", "send_guest_greeting"):
+                if tool_name in (
+                    "complete_request_with_confirmation",
+                    "send_room_selector",
+                    "send_service_menu",
+                    "send_guest_greeting",
+                ):
                     tool_sent_response = True
 
-                messages.append({
-                    "role":         "tool",
-                    "tool_call_id": tc["id"],
-                    "content":      json.dumps(tool_result),
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": json.dumps(tool_result),
+                    }
+                )
 
             continue
 
@@ -806,7 +863,9 @@ def run_agent(wa_id: str, guest_name: str, user_text: str, msg_type: str = "text
             partial = assistant_message.get("content", "").strip()
             if finish_reason == "length" and partial:
                 # Model hit token limit but produced usable text — use it
-                logging.warning(f"[Agent] finish_reason=length for {wa_id}; using partial response.")
+                logging.warning(
+                    f"[Agent] finish_reason=length for {wa_id}; using partial response."
+                )
                 final_response = partial
             else:
                 logging.warning(f"[Agent] Unexpected finish_reason: {finish_reason}")
@@ -814,7 +873,9 @@ def run_agent(wa_id: str, guest_name: str, user_text: str, msg_type: str = "text
             break
 
     if not final_response and not tool_sent_response:
-        final_response = "I'm unable to process your request right now. Please contact reception."
+        final_response = (
+            "I'm unable to process your request right now. Please contact reception."
+        )
 
     if final_response:
         store_message(wa_id, "assistant", final_response)
